@@ -328,9 +328,13 @@ def model_step(model, train_data, optimizer, epoch, args):
         output = model(x)
         y = y.to(device)
         loss = get_loss(output, y, args)
+        print("loss")
+        print(loss.shape)
+        print(loss)
         loss.backward()
         optimizer.step()
         running_loss += loss.item()
+    print(len(train_data))
     loss = running_loss / len(train_data)
     print('Epoch {}, Train Loss: {:.5f}'.format(epoch+1, loss))
 

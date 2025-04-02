@@ -4,11 +4,14 @@ Quick-and-dirty one-day experiments to check if we can leverage a reformulation 
 
 The tendency $R^2$ score reported in [the paper](https://arxiv.org/pdf/2207.11786) is 77.1% (0.77; average over all 4 aerosol species). 
 
-With very limited training (3 epochs) and no conditioning on location or time we already a mean $R^2$ of 0.945 and the following $R^2$ scores per aerosol species on the provided test data sets:
+With very limited training and no conditioning on location or time we already a mean $R^2$ of 0.945 and the following $R^2$ scores per aerosol species on the provided test data sets:
 - SO4: 0.849
 - BC: 0.973
 - OC (not California...): 0.963
 - DU: 0.997
+
+Each epoch trains over all 5 M training points.
+
 However, the tendency $R^2$ is still high as tendencies are small.
 
 We now rather parameterise the transition matrix! The rows of the transition matrix are here parameterised with softmax outputs!
