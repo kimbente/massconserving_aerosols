@@ -70,3 +70,14 @@ As the total mass per grid cells stays the same, we use the relative (discrete) 
     - potentially keep encoder seperate until a certain depth of the network (arcitecture ablation)
 - check if geosppatial embedding like MOSAIK or SatCLIP help the prediction. While this is the atmosphere, satellite data may still contain useful information that are important for this.
 - separate models for each s or shall we make it a meta-learning task.
+
+## Notes to self
+- Is a transition framework more stable as an approach if we do **multi-task learning**?
+    - Can a Neural Process understand which subset we are in?
+- Learnings:
+    - predict y_delta not y
+- LogSoftmax_model
+    - log transform input x
+    - predict tendencies directly
+    - avoid negativity through scaling
+    - scaled zero-mean softmax is used

@@ -1,13 +1,14 @@
 ''' A collection of functions and classes for the neural network emulator'''
 
 from models import Base, SignExtBase, ClassificationNN, PositivityNN, CompletionNN, CorrectionNN
-from models import Softmax_model, TransitionMM
+from models import Softmax_model, TransitionMM, LogSoftmax_model
 import torch 
 import torchvision
 import torch.nn as nn
 import torchvision.transforms as transforms
 import torch.optim as optim
 import torch.nn.functional as F
+from torcheval.metrics.functional import r2_score as r2 # duplicate name
 from torch.utils.data import DataLoader, TensorDataset
 from torch.autograd import Variable
 import numpy as np
@@ -132,12 +133,14 @@ def standard_transform_y(stats, x):
 def standard_transform_y_inv(stats, x):
     return x[:,:28]*stats['ytrain_std']+stats['ytrain_mean']
 
+# Distorts the order?
 def log_transform(x):
-    return np.log(np.abs(x)+1e-8)
+    return np.log(np.abs(x)+1e-8) # how can we jsut use the absolute value here??
 
 def exp_transform(x):
     return np.exp(x)-1e-8
 
+# also produce mean zero and std 1
 def log_full_norm_transform_x(stats, x):
     x = log_transform(x)
     x = (x-stats['X_log_eps_mean'])/stats['X_log_eps_std']
@@ -175,6 +178,8 @@ def get_model(in_features, out_features,args, constraints_active):
     if args.model == 'standard' or args.model == 'standard_log':
         model = Base(in_features, out_features, args.width)
     ### KB add this option ###
+    elif args.model == 'log_softmax':
+        model = LogSoftmax_model(in_features, out_features, args.width)
     elif args.model == 'transition_model':
         model = TransitionMM(in_features, out_features, args.width)
     elif args.model == 'softmax_model':
@@ -197,6 +202,8 @@ def get_loss(output, y, args):
     class_criterion = nn.BCELoss()
     if args.loss == 'mse':
         return criterion(output, y)
+    elif args.loss == 'rmse':
+        return torch.sqrt(criterion(output, y)) #order
     elif args.loss == 'mse_mass':
         return criterion(output[:,:28], y[:,:28])+overall_z_mass(output)
     elif args.loss == 'mse_positivity':
@@ -205,7 +212,6 @@ def get_loss(output, y, args):
         return criterion(output, y)+torch.mean(mass_log(output))
     elif args.model == 'classification':
         return class_criterion(output, y)
-    
 
 
 #####################
@@ -296,13 +302,13 @@ def train_model(model, train_data, test_data, optimizer, input_dim, output_dim, 
     patience = 0
     print('GPU available:', torch.cuda.is_available())
     is_stop = False
-    if args.save_val_scores:
+    if args.save_val_scores: # Usually false
         val_r2 = []
         val_mse = []
         val_mass = []
         val_neg = []
     for i in range(args.epochs):
-        model_step(model, train_data, optimizer, i, args)
+        model_step(model, train_data, optimizer, i, args) # model step takes train data
         val_loss = get_val_loss(model, test_data, i, args)
         if args.save_val_scores:
             r2, mse, mass, neg = get_val_scores(model, X_test, y_test, i, stats, args)
@@ -327,14 +333,16 @@ def model_step(model, train_data, optimizer, epoch, args):
         model.to(device)
         output = model(x)
         y = y.to(device)
-        loss = get_loss(output, y, args)
-        print("loss")
-        print(loss.shape)
+        # loss = r2(output, y) # use torch
+        loss = get_loss(output, y, args) # rmse setting
+        # print("loss check")
         print(loss)
         loss.backward()
         optimizer.step()
+        # batch loss added
         running_loss += loss.item()
-    print(len(train_data))
+    # print(len(train_data))
+    # devide by number of batches to get average
     loss = running_loss / len(train_data)
     print('Epoch {}, Train Loss: {:.5f}'.format(epoch+1, loss))
 
@@ -379,10 +387,11 @@ def get_val_scores(model, X_test, y_test, epoch, stats, args):
     pred = model(torch.Tensor(X_test).to(device))
     pred = pred.cpu().detach().numpy()
     #scale back
-    
-    pred = standard_transform_y_inv(stats, pred)
-    y_test = standard_transform_y_inv(stats, y_test)
-    X_test = standard_transform_x_inv(stats, X_test)
+
+
+    # pred = standard_transform_y_inv(stats, pred)
+    # y_test = standard_transform_y_inv(stats, y_test)
+    # X_test = standard_transform_x_inv(stats, X_test)
     
     scores = get_scores(y_test, pred, X_test, stats)
     
@@ -509,9 +518,9 @@ def get_scores(true, pred, X_test, stats):
     mass_biases = mass_middle(pred, stats) #individual masses divided by the respective abs mean
     masses_rmse = mass_rmse(true, pred, stats)#individual masses divided by the respective abs mean
     full_pred = np.zeros_like(pred)
-    full_pred[:,:24] = pred[:,:24]+X_test[:,8:]
+    full_pred[:,:24] = pred[:,:24] + X_test[:,8:]
     full_pred[:,24:] = pred[:,24:]
-    neg_frac = np.mean(full_pred<0)
+    neg_frac = np.mean(full_pred < 0)
     negative_mean = neg_mean(full_pred, stats)
     return {'R2': r2, 'R2 log': r2_log, 'RMSE': rmse, 'Mass Bias':mass_biases, 'Mass RMSE':masses_rmse,'Negative fraction': neg_frac,'Negative mean' : negative_mean}
 
