@@ -108,8 +108,14 @@ As the total mass per grid cells stays the same, we use the relative (discrete) 
 - Each epoch trains over all 5 M training points.
 
 ## ToDos
-- add relative signal (test of all)
+- add relative signal (test of all) ceteris paribus.
     - remove rows with issue
-- experiment with bias term
-- use R^2 as the loss
+- experiment with bias term.
+- use R^2 as the training loss
+- Check <span style="color:red">R^2 issues</span>
+    - [torch R^2 score](https://pytorch.org/torcheval/main/_modules/torcheval/metrics/functional/regression/r2_score.html) does not correct for zero variance denominators/numerators. This blows up the R^2 validation score. The order of inputs in pytorch is pred, true. 
+    - [sklearn r2_score](https://pytorch.org/torcheval/main/generated/torcheval.metrics.R2Score.html) does do this. Note that the order of inputs in sklearn is true, pred.
+- Also <span style="color:red">calculate test loss after final iteration</span>
+- Check <span style="color:red">path for saving the convergences</span>
+
 
