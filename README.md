@@ -1,22 +1,43 @@
 # Mass-conserving aerosol microphysics
 
-Quick-and-dirty one-day experiments to check if we can leverage a reformulation of the grid-cell-wise mass conservation problem that let's us apply a NN with soft-max output layer as the aerosol emulation model, while **guaranteeing non-negativity as well as mass conservation**.
+Quick-and-dirty three-day experiments to check if we can leverage a reformulation of the grid-cell-wise mass conservation problem that let's us apply a NN with soft-max output layer (i.e. a transition matrix) as the aerosol emulation model, while **guaranteeing non-negativity as well as mass conservation**.
 
 The tendency $R^2$ score reported in [the paper](https://arxiv.org/pdf/2207.11786) is 77.1% (0.77; average over all 4 aerosol species). 
 
-With very limited training and no conditioning on location or time we already a mean $R^2$ of 0.945 and the following $R^2$ scores per aerosol species on the provided test data sets:
+With very limited training and no conditioning on location or time we achive a mean $R^2$ of 0.945 and the following $R^2$ scores per aerosol species on the provided test data sets, however this was not using tendencies but x (at t = 0) and y (at t = 1).
 - SO4: 0.849
 - BC: 0.973
 - OC (not California...): 0.963
 - DU: 0.997
 
-Each epoch trains over all 5 M training points.
+However, the tendency $R^2$ is still high as tendencies are small. These results can be reporduced by running *main_notebook.ipynb*
 
-However, the tendency $R^2$ is still high as tendencies are small.
+## These were my ideas:
 
-We now rather parameterise the transition matrix! The rows of the transition matrix are here parameterised with softmax outputs!
+All ideas rely on **hard-constraining** the problem directly, which requires building a model for ever species.
+- **Transition matrix**
+    - Estimating an n_classes x n_classes transition matrix where we can use row-wise softmax outputs to ensure that all mass is conserved. 
+    - Then the transition proprotions (not quite probabilities here) are applied to the absolute masses at t = 0 via multiplication, to get the transitioning masses (tendendies) while ensuring non-negativity. (If a "mode" is mass 0, multiplying anything by it will still yield zero.)
+    - The tendencies are very small compared to the total mass, particularly for SO4, which is why - even with stabilising the transition matrix parameterision which a strong diagonal self-transition bias, it might have issues in this case. Let's run some experiments.
+    - This requires a zero preserving transformation of the input, so that non-negativity can be guaranteed. Arcsin might be better than log (while clamping negative values as they technically are not allowed.)
+    - Technically this is the more elegant method as both constraints are met by deisgn. However we need to make it work with the correct transformations. Parsimony is key.
+    - We take the total and relative input explicitly so the network can use both information as input.
+    - One output of the network is used to scale the ouput tendencies properly.
+    - We leverage additional variables to get better predictions. 
 
-These results can be reporduced by running *main_notebook.ipynb*
+- **Predicting mass conserving tendencies** (old approach)
+    - By predicting a tendency vector that adds to zero we can preserve mass. 
+    - This can be achieved my using any output (or a softmax output because it has a known mean (1/length)), subtracting the (known) mean so we get a zero-mean vector which is **mass conserving**. However with non-linear transformations applied to the output, like arcsin(), this is not straightforward.
+    - To achieve **non-negativity**, we can apply a linear scaling to the tendency vector in the last step. Using the OG input scale, we can determine what scaling factor is needed to satisfy the constraint. In the worst case the vector is multiplied by 0. Linear scaling does not distort the property. 
+
+Design decisions:
+- Transformations (really important here!)
+    - log - does not preserve zero, and is not even defined for zero.
+    - arcsinh - preserve zero and is thus preferrable
+- target
+    - tendencies (i.e. deltas) or totals
+    - deltas are very small in relation to totals, so to get any learning signal we should rather estimate the tendencies (and to compare to the work we are building on.)
+    - scales
 
 ## Original paper
 
@@ -81,3 +102,14 @@ As the total mass per grid cells stays the same, we use the relative (discrete) 
     - predict tendencies directly
     - avoid negativity through scaling
     - scaled zero-mean softmax is used
+- Model per species as data patterns are different.
+- Does the model in the original paper benefit from the **additional inputs**? If we use all 24 inputs to estimate one species (e.g. 5 outputs), is that better?
+- How big is the difference between 
+- Each epoch trains over all 5 M training points.
+
+## ToDos
+- add relative signal (test of all)
+    - remove rows with issue
+- experiment with bias term
+- use R^2 as the loss
+
